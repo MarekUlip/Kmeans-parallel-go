@@ -6,11 +6,13 @@ import (
 	"time"
 )
 
+//Struct representing one point
 type Point struct {
 	numbers   []float64
 	dimension int
 }
 
+//Struct representing "class" Kmeans that does the actual Kmeans
 type Kmeans struct {
 	points       []Point
 	k            int
@@ -19,11 +21,13 @@ type Kmeans struct {
 	numOfThreads int
 }
 
+//Struct used in channel communication
 type Cluster struct {
 	index  int
 	points []Point
 }
 
+//Struct used in channel communication
 type ClusterPoint struct {
 	index int
 	point Point
@@ -37,6 +41,7 @@ func (k Kmeans) euklideanDistance(a Point, b Point) float64 {
 	return math.Sqrt(sum)
 }
 
+//Returns index of closest centroid based on euklidean distance
 func (k Kmeans) getClosestCentroid(centroids []Point, point Point) int {
 	closest := -1
 	distance := math.MaxFloat64
@@ -50,24 +55,28 @@ func (k Kmeans) getClosestCentroid(centroids []Point, point Point) int {
 	return closest
 }
 
+//Creates new centroid based on avg point in cluster
 func (k Kmeans) countNewCentroidForCluster(cluster []Point) Point {
 	newCentroidPoint := make([]float64, k.dimension)
 	newCentroid := Point{
 		newCentroidPoint,
 		k.dimension,
 	}
+	//Sum all points
 	for _, point := range cluster {
 		for i := 0; i < k.dimension; i++ {
 			newCentroid.numbers[i] += point.numbers[i]
 		}
 	}
 
+	//And get their average value
 	for i := 0; i < k.dimension; i++ {
 		newCentroid.numbers[i] /= float64(len(cluster))
 	}
 	return newCentroid
 }
 
+//Counts centorid for cluster provided in channel
 func (k Kmeans) centroidWorker(taskChannel chan Cluster, centroidResChannel chan ClusterPoint) {
 	for {
 		value, more := <-taskChannel
@@ -82,6 +91,7 @@ func (k Kmeans) centroidWorker(taskChannel chan Cluster, centroidResChannel chan
 	}
 }
 
+//Adds centroid provided in channel into centroids array
 func (k Kmeans) centroidResultWorker(centroidResChannel chan ClusterPoint, endChannel chan bool, centroids []Point) {
 	proccessed := 0
 	for {
@@ -101,6 +111,7 @@ func (k Kmeans) centroidResultWorker(centroidResChannel chan ClusterPoint, endCh
 	}
 }
 
+//Creates array of new centroids for each cluster
 func (k Kmeans) createNewCentroids(clusters [][]Point) []Point {
 	centroids := make([]Point, len(clusters))
 	taskChannel := make(chan Cluster)
@@ -123,12 +134,15 @@ func (k Kmeans) createNewCentroids(clusters [][]Point) []Point {
 		taskChannel <- clus
 	}
 	close(taskChannel)
+	//Wait till all goroutines end
 	<-endChannel
 	close(centroidResChannel)
 	close(endChannel)
 	return centroids
 }
 
+//Worker that finds best centroid for each of point in provided range
+//Result are then sent into resChannel to prevent concurency issues of writing results directly in this worker
 func (k Kmeans) centroidSearchWorkerParallel(points []Point, resChannel chan []ClusterPoint, centroids []Point, start int, end int) {
 	clusterPoints := make([]ClusterPoint, 0)
 	for i := start; i < end; i++ {
@@ -137,6 +151,7 @@ func (k Kmeans) centroidSearchWorkerParallel(points []Point, resChannel chan []C
 	resChannel <- clusterPoints
 }
 
+//Assign points assignments into specific clusters
 func (k Kmeans) clusterPointAsignWorker(resChannel chan []ClusterPoint, endChannel chan bool, clusters [][]Point) {
 	processed := 0
 	for {
@@ -162,6 +177,7 @@ func (k Kmeans) clusterPointAsignWorker(resChannel chan []ClusterPoint, endChann
 
 }
 
+//Creates new clusters using goroutines
 func (k Kmeans) initClustersParallel(points []Point, centroids []Point) [][]Point {
 	clusters := make([][]Point, len(centroids))
 	resChannel := make(chan []ClusterPoint)
@@ -189,6 +205,7 @@ func (k Kmeans) initClustersParallel(points []Point, centroids []Point) [][]Poin
 	return clusters
 }
 
+//Checks how much are new centroids different from the previous ones
 func (k Kmeans) checkCentroidChange(centroids []Point, newCentroids []Point) bool {
 	centroidChange := 0.0
 	for index, point := range centroids {
@@ -197,6 +214,7 @@ func (k Kmeans) checkCentroidChange(centroids []Point, newCentroids []Point) boo
 	return centroidChange > k.minChange
 }
 
+//Helper function substituting (in) keyword used in python
 func numInSlice(num int, slice []int) bool {
 	for _, number := range slice {
 		if num == number {
@@ -227,6 +245,7 @@ func (k Kmeans) doKmeansParallel() [][]Point {
 	centroids := make([]Point, k.k)
 	occured := make([]int, 0)
 	numOfPoints := len(k.points)
+	//Without setting seed results would always be same
 	rand.Seed(time.Now().UnixNano())
 	for i := 0; i < k.k; i++ {
 		random := rand.Intn(numOfPoints)
