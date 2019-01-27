@@ -29,11 +29,6 @@ type ClusterPoint struct {
 	point Point
 }
 
-type CentroidsEval struct {
-	point     Point
-	centroids []Point
-}
-
 func (k Kmeans) euklideanDistance(a Point, b Point) float64 {
 	sum := 0.0
 	for i := 0; i < k.dimension; i++ {
@@ -131,39 +126,7 @@ func (k Kmeans) createNewCentroids(clusters [][]Point) []Point {
 	<-endChannel
 	close(centroidResChannel)
 	close(endChannel)
-	/*counter := 0
-	for {
-		value, more := <-centroidResChannel
-		if more {
-			//println("Assigning")
-			centroids[value.index] = value.point
-		} else {
-			//println("Ending")
-			break
-		}
-		counter++
-		println("recieved something")
-		if counter == launchedThreads {
-			close(centroidResChannel)
-			break
-		}
-	}*/
 	return centroids
-}
-
-func (k Kmeans) centroidSearchWorker(taskChannel chan Point, resChannel chan []ClusterPoint, centroids []Point) {
-	clusterPoints := make([]ClusterPoint, 0)
-	for {
-		value, more := <-taskChannel
-		if more {
-			//println("Searching best centroid")
-			clusterPoints = append(clusterPoints, ClusterPoint{k.getClosestCentroid(centroids, value), value})
-		} else {
-			//println("Closing")
-			resChannel <- clusterPoints
-			return
-		}
-	}
 }
 
 func (k Kmeans) centroidSearchWorkerParallel(points []Point, resChannel chan []ClusterPoint, centroids []Point, start int, end int) {
@@ -203,7 +166,6 @@ func (k Kmeans) initClustersParallel(points []Point, centroids []Point) [][]Poin
 	clusters := make([][]Point, len(centroids))
 	resChannel := make(chan []ClusterPoint)
 	endChannel := make(chan bool)
-	//avgClusterSize := int(len(points))
 	for i := 0; i < k.k; i++ {
 		clusters[i] = make([]Point, 0)
 	}
@@ -221,31 +183,6 @@ func (k Kmeans) initClustersParallel(points []Point, centroids []Point) [][]Poin
 	}
 	go k.clusterPointAsignWorker(resChannel, endChannel, clusters)
 
-	<-endChannel
-	close(resChannel)
-	close(endChannel)
-	return clusters
-}
-
-func (k Kmeans) initClusters(points []Point, centroids []Point) [][]Point {
-	clusters := make([][]Point, len(centroids))
-	taskChannel := make(chan Point)
-	resChannel := make(chan []ClusterPoint)
-	endChannel := make(chan bool)
-	//avgClusterSize := int(len(points))
-	for i := 0; i < k.k; i++ {
-		clusters[i] = make([]Point, 0)
-	}
-
-	for i := 0; i < k.numOfThreads; i++ {
-		go k.centroidSearchWorker(taskChannel, resChannel, centroids)
-	}
-	go k.clusterPointAsignWorker(resChannel, endChannel, clusters)
-
-	for _, point := range points {
-		taskChannel <- point
-	}
-	close(taskChannel)
 	<-endChannel
 	close(resChannel)
 	close(endChannel)
@@ -284,35 +221,6 @@ func (k Kmeans) createNewCentroidsSerial(clusters [][]Point) []Point {
 		centroids = append(centroids, k.countNewCentroidForCluster(cluster))
 	}
 	return centroids
-}
-
-func (k Kmeans) doKmeans() [][]Point {
-	centroids := make([]Point, k.k)
-	occured := make([]int, 0)
-	numOfPoints := len(k.points)
-	rand.Seed(time.Now().UnixNano())
-	for i := 0; i < k.k; i++ {
-		random := rand.Intn(numOfPoints)
-		for {
-			if !numInSlice(random, occured) {
-				break
-			}
-			random = rand.Intn(numOfPoints)
-		}
-		occured = append(occured, random)
-		centroids[i] = k.points[random]
-	}
-	clusters := k.initClusters(k.points, centroids)
-	newCentroids := k.createNewCentroids(clusters)
-	for {
-		if !k.checkCentroidChange(centroids, newCentroids) {
-			break
-		}
-		centroids = newCentroids
-		clusters = k.initClusters(k.points, centroids)
-		newCentroids = k.createNewCentroids(clusters)
-	}
-	return clusters
 }
 
 func (k Kmeans) doKmeansParallel() [][]Point {
